@@ -44,8 +44,10 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
     override def run(): Unit = {
       try {
         while (!stopped.get) {
+          // 不断的从队列中取出事件
           val event = eventQueue.take()
           try {
+            // DAGSchedulerEventProcessLoop 实现 onReceive
             onReceive(event)
           } catch {
             case NonFatal(e) =>
@@ -102,7 +104,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def post(event: E): Unit = {
     if (!stopped.get) {
       if (eventThread.isAlive) {
-        eventQueue.put(event)
+        eventQueue.put(event)// 将事件放入队列
       } else {
         onError(new IllegalStateException(s"$name has already been stopped accidentally."))
       }

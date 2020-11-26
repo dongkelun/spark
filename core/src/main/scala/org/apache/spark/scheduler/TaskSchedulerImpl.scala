@@ -239,6 +239,7 @@ private[spark] class TaskSchedulerImpl(
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks "
       + "resource profile " + taskSet.resourceProfileId)
     this.synchronized {
+      //创建一个TaskSetManager，每个taskset都会创建一个taskmanager
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
@@ -257,6 +258,8 @@ private[spark] class TaskSchedulerImpl(
         ts.isZombie = true
       }
       stageTaskSets(taskSet.stageAttemptId) = manager
+      //将创建的TaskSetManager实例通过schedulableBuilder（分为FIFOSchedulableBuilder和FairSchedulableBuilder两种）投入调度池中
+      //等待调度调用backend的reviveOffers函数
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -274,6 +277,8 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+    // 实现方法在 cluster.CoarseGrainedClusterMessage 类里 和 local.LocalSchedulerBackend 分别对应集群和本地模式
+    // 向backend的driverActor实例发送ReviveOffers消息,driveerActor收到ReviveOffers消息后，调用makeOffers处理函数
     backend.reviveOffers()
   }
 
@@ -497,6 +502,7 @@ private[spark] class TaskSchedulerImpl(
       isAllFreeResources: Boolean = true): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each worker as alive and remember its hostname
     // Also track if new executor is added
+    // 从worker offers里，搜集executor和host的对应关系、active executors、机架信息等等
     var newExecAvail = false
     for (o <- offers) {
       if (!hostToExecutors.contains(o.host)) {
@@ -526,16 +532,19 @@ private[spark] class TaskSchedulerImpl(
           !blacklistTracker.isExecutorBlacklisted(offer.executorId)
       }
     }.getOrElse(offers)
-
+    //worker offers资源列表进行随机洗牌，任务队列里的任务列表依据调度策略进行一次排序
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
     // close estimate
+    // worker的task列表
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
+    //获得一个排序后的TaskSet集合
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
+
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -547,6 +556,8 @@ private[spark] class TaskSchedulerImpl(
     // Take each TaskSet in our scheduling order, and then offer it to each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
+    // 按照我们的调度顺序获取每个TaskSet，然后按局部性级别的升序将其提供给每个节点，以便它有机会在所有任务集上启动本地任务。
+    // 注意：preferredLocality顺序：PROCESS_LOCAL，NODE_LOCAL，NO_PREF，RACK_LOCAL，ANY
     for (taskSet <- sortedTaskSets) {
       // we only need to calculate available slots if using barrier scheduling, otherwise the
       // value is -1
@@ -576,6 +587,7 @@ private[spark] class TaskSchedulerImpl(
         var globalMinLocality: Option[TaskLocality] = None
         // Record all the executor IDs assigned barrier tasks on.
         val addressesWithDescs = ArrayBuffer[(String, TaskDescription)]()
+        //得到排序后的taskset集合后，再获取集合中每一个taskset的最高的本地化级别
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
           var launchedTaskAtCurrentMaxLocality = false
           do {
@@ -701,6 +713,7 @@ private[spark] class TaskSchedulerImpl(
     if (tasks.nonEmpty) {
       hasLaunchedTask = true
     }
+    //返回各种处理后的tasks
     return tasks.map(_.toSeq)
   }
 

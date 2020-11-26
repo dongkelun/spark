@@ -86,7 +86,7 @@ private[spark] class ResultTask[T, U](
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
-
+    //这个func是用户调用行动算子时的逻辑函数
     func(context, rdd.iterator(partition, context))
   }
 

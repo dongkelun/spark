@@ -298,16 +298,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private def makeOffers(): Unit = {
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
-        // Filter out executors under killing
+        // Filter out executors under killing //筛选当前active状态的所有的executors
         val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
+            // 每个active的executor都创建一个 WorkerOffer
             new WorkerOffer(id, executorData.executorHost, executorData.freeCores,
               Some(executorData.executorAddress.hostPort),
               executorData.resourcesInfo.map { case (rName, rInfo) =>
                 (rName, rInfo.availableAddrs.toBuffer)
               }, executorData.resourceProfileId)
         }.toIndexedSeq
+        // 此方法由集群调用，在集群的slave准备资源。根据TaskSet的优先级，以轮询的方式发送到任务，以保证负载均衡
         scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
@@ -347,9 +349,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    // Launch tasks returned by a set of resource offers
+    // Launch tasks returned by a set of resource offers  通过返回一组 resource offers 来 启动任务
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]): Unit = {
       for (task <- tasks.flatten) {
+        //将task的描述信息序列化
         val serializedTask = TaskDescription.encode(task)
         if (serializedTask.limit() >= maxRpcMessageSize) {
           Option(scheduler.taskIdToTaskSetManager.get(task.taskId)).foreach { taskSetMgr =>
@@ -365,6 +368,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
+          //获取当前Tasks应该发往的executor的信息
           val executorData = executorDataMap(task.executorId)
           // Do resources allocation here. The allocated resources will get released after the task
           // finishes.
@@ -379,8 +383,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
           logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
             s"${executorData.executorHost}.")
-
+          //向executorEndpoint发送LaunchTask信息，同时将 TaskDesc也发送过去
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
+          //需要在 org.apache.spark.executor.CoarseGrainedExecutorBackend (这个就是executorEndpoint)的receive方法中查看消息：
+
         }
       }
     }
@@ -602,7 +608,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def reviveOffers(): Unit = Utils.tryLogNonFatalError {
-    driverEndpoint.send(ReviveOffers)
+    driverEndpoint.send(ReviveOffers) //向driverEndpoint发送ReviveOffers消息
   }
 
   override def killTask(

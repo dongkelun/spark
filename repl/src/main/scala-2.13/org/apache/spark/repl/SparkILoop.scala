@@ -93,7 +93,7 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version %s
+   /___/ .__/\_,_/_/ /_/\_\   version %s  by dongkelun 20201010 repl 2.13
       /_/
          """.format(SPARK_VERSION))
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(

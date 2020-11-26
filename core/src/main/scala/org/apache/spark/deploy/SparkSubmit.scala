@@ -136,7 +136,7 @@ private[spark] class SparkSubmit extends Logging {
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version %s
+   /___/ .__/\_,_/_/ /_/\_\   version %s by dongkelun 20201010
       /_/
                         """.format(SPARK_VERSION))
     logInfo("Using Scala %s, %s, %s".format(

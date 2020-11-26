@@ -50,11 +50,13 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
     var writer: ShuffleWriter[Any, Any] = null
     try {
       val manager = SparkEnv.get.shuffleManager
+      // shuffle以什么形式写出，由shuffleManager决定，可由自己配置
       writer = manager.getWriter[Any, Any](
         dep.shuffleHandle,
         mapId,
         context,
         createMetricsReporter(context))
+      //执行写出操作
       writer.write(
         rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get

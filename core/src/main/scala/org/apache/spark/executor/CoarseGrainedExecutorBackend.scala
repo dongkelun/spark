@@ -177,7 +177,7 @@ private[spark] class CoarseGrainedExecutorBackend(
               logError("No registered driver to send Decommission to.")
           }
         }
-        val taskDesc = TaskDescription.decode(data.value)
+        val taskDesc = TaskDescription.decode(data.value)//将task描述信息反序列化
         logInfo("Got assigned task " + taskDesc.taskId)
         taskResources(taskDesc.taskId) = taskDesc.resources
         executor.launchTask(this, taskDesc)

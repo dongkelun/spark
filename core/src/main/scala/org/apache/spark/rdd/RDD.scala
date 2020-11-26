@@ -331,9 +331,12 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+    //判断是否使用了缓存
     if (storageLevel != StorageLevel.NONE) {
+      //如果有缓存，直接从缓存中获取EDD
       getOrCompute(split, context)
     } else {
+      //如果没有缓存，尝试从checkpoint目录中获取RDD，如果没有就计算得到
       computeOrReadCheckpoint(split, context)
     }
   }

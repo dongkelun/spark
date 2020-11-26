@@ -226,6 +226,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         // old batches.
         throw new IllegalStateException(s"failed to read log file for batch $batchId")
       }
+      // scalastyle:off println
+      println(batchId, content)
+      // scalastyle:on println
       (batchId, content)
     }
   }

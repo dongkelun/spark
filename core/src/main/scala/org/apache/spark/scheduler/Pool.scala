@@ -104,7 +104,10 @@ private[spark] class Pool(
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    //从rootPool中获取schedulableQueue，之后将队列中的TaskSet，调用调度算法(FIFO)进行排序
     val sortedSchedulableQueue =
+    //taskSetSchedulingAlgorithm默认是FIFOSchedulingAlgorithm()，是通过stageId进行比较的
+    //   这个方法得到一个按stageId从小到大排序后的TaskSet集合
       schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue.filter(_.isSchedulable)

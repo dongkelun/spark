@@ -73,7 +73,7 @@ private[spark] class ShuffleMapTask(
   @transient private val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.distinct
   }
-
+//这个task逻辑是将当前stage的结果写出，然后供下一个stage使用，所以一定会有write方法
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val threadMXBean = ManagementFactory.getThreadMXBean
