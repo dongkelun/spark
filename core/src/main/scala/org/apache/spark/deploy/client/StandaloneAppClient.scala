@@ -84,6 +84,8 @@ private[spark] class StandaloneAppClient(
 
     override def onStart(): Unit = {
       try {
+        //发消息给master来注册app（其实质是发送消息给所有masters,
+        // 一旦跟一个master连接成功，就cancel与其他master的连接） masterRef.send(RegisterApplication(appDescription,self))
         registerWithMaster(1)
       } catch {
         case e: Exception =>
@@ -95,16 +97,24 @@ private[spark] class StandaloneAppClient(
 
     /**
      *  Register with all masters asynchronously and returns an array `Future`s for cancellation.
+     *
+     * tryRegisterAllMasters()这个是一个缓存线程池,spark自己实现ThreadPoolExecutor，该线程池也是一个守护线程池，主线程停止，它也停止
+     *
+     * 异步注册所有master和返回Future集合进行取消
      */
     private def tryRegisterAllMasters(): Array[JFuture[_]] = {
       for (masterAddress <- masterRpcAddresses) yield {
+        // spark重写了缓存线程池，该池是守护线程池，主线程退出，它也消失，jdk默认提供的缓存线程池也是ThreadPoolExecutor重新构造了一下
         registerMasterThreadPool.submit(new Runnable {
           override def run(): Unit = try {
             if (registered.get) {
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
+            //取得masterRpcEndPoint，然后发送注册信息
+            // RpcEnv是在sparkEnv创建出来的，而MasterRpcEndPoint是通过Master自己的RpcEnv中创建出来的。
             val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
+            //需要注意的是:这里的appDescription包含了app的具体信息，包括command信息,里面有启动类CoarseGrainedExecutorBackend；这里的self是ClientEndpoint本身
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -120,17 +130,29 @@ private[spark] class StandaloneAppClient(
      * Once we connect to a master successfully, all scheduling work and Futures will be cancelled.
      *
      * nthRetry means this is the nth attempt to register with master.
+     * 异步注册所有master.每20秒（REGISTRATION_TIMEOUT_SECONDS）执行一次registerWithMaster，直到超过3次（REGISTRATION_RETRIES）
+     * 一旦连上master就会将所有调度线程会被取消掉
+     * 参数nthRetry：表示尝试向master注册的次数
      */
     private def registerWithMaster(nthRetry: Int): Unit = {
+      // tryRegisterAllMasters()发消息给master来注册app（其实质是发送消息给所有masters,
+      // 一旦跟一个master连接成功，就cancel与其他master的连接）
+      // registerMasterFutures:newAtomicReference[Array[JFuture[_]]]，将Future存起来方便取消线程
       registerMasterFutures.set(tryRegisterAllMasters())
+      // registrationRetryTimer:AtomicReference[JScheduledFuture[_]],方便联接到的master时，将其它的线程通过ScheduledFuture.cancel()掉
+      // 先延迟20秒，然后每20秒执行一次。延迟20s是为了给tryRegisterAllMasters()线程池去直接注册，如果注册成功之后registered会为true
       registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
+          // registered:AtomicBoolean(false)默认是false
+          // 当tryRegisterAllMasters()的线程池注册成功之后会将registered设置true，然后将它里面的线程取消掉，同时将当前调度线程池也关掉
           if (registered.get) {
             registerMasterFutures.get.foreach(_.cancel(true))
             registerMasterThreadPool.shutdownNow()
           } else if (nthRetry >= REGISTRATION_RETRIES) {
+            // 重复注册3次，还是没有成功，就认为master死了，会执行sparkContext.stop
             markDead("All masters are unresponsive! Giving up.")
           } else {
+            // 如果nthRetry小于3，则先将tryRegisterAllMasters线程池中的线程取消掉，然后回调一下自己，并将nthRetry加1
             registerMasterFutures.get.foreach(_.cancel(true))
             registerWithMaster(nthRetry + 1)
           }
@@ -258,7 +280,9 @@ private[spark] class StandaloneAppClient(
     }
 
     def markDead(reason: String): Unit = {
+      // alreadyDead:AtomicBoolean(false)默认是false
       if (!alreadyDead.get) {
+        //listener就是StandaloneSchedulerBackend
         listener.dead(reason)
         alreadyDead.set(true)
       }
@@ -277,6 +301,7 @@ private[spark] class StandaloneAppClient(
 
   def start(): Unit = {
     // Just launch an rpcEndpoint; it will call back into the listener.
+    // 初始化一个ClientEndpoint这个RpcEndpointRef放到RpcEnv中，同时将引用给endpoint原子引用
     endpoint.set(rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv)))
   }
 

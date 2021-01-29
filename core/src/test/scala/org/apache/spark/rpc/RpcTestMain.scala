@@ -17,6 +17,10 @@ object RpcTestMain {
     val rpcEndpointRef = env.setupEndpoint("send-locally", new RpcEndpoint {
       override val rpcEnv = env
 
+      override def onStart(): Unit = {
+        println("start hello endpoint")
+      }
+
       override def receive = {
         case msg: String => {
           println(msg)

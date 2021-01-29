@@ -173,10 +173,11 @@ private[deploy] class DriverRunner(
   }
 
   private[worker] def prepareAndRunDriver(): Int = {
+    //下载Driver jar到worker本地
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
     val resourceFileOpt = prepareResourcesFile(SPARK_DRIVER_PREFIX, resources, driverDir)
-
+    //替换参数中的workerUrl和workerUrl
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl
       case "{{USER_JAR}}" => localJarFilename
@@ -184,9 +185,14 @@ private[deploy] class DriverRunner(
     }
 
     // config resource file for driver, which would be used to load resources when driver starts up
+    // 驱动程序的配置资源文件，该文件将在驱动程序启动时用于加载资源
     val javaOpts = driverDesc.command.javaOpts ++ resourceFileOpt.map(f =>
       Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${f.getAbsolutePath}")).getOrElse(Seq.empty)
     // TODO: If we add ability to submit multiple jars they should also be added here
+    /**
+     * 将Driver中的参数组织为Linux命令
+     * 通过Java执行组织好的命令，使用java.lang.ProcessBuilder运行
+     */
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command.copy(javaOpts = javaOpts),
       securityManager, driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
 

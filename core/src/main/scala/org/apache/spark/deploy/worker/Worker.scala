@@ -597,6 +597,7 @@ private[deploy] class Worker(
             ExecutorState.LAUNCHING,
             resources_)
           executors(appId + "/" + execId) = manager
+          //执行ExecutorRunner的start方法
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
@@ -629,9 +630,10 @@ private[deploy] class Worker(
             logInfo("Asked to kill unknown executor " + fullId)
         }
       }
-
+    //接收并处理LaunchDriver信息
     case LaunchDriver(driverId, driverDesc, resources_) =>
       logInfo(s"Asked to launch driver $driverId")
+      //将Driver信息封装为DriverRunner
       val driver = new DriverRunner(
         conf,
         driverId,
@@ -643,6 +645,7 @@ private[deploy] class Worker(
         securityMgr,
         resources_)
       drivers(driverId) = driver
+      //启动Driver
       driver.start()
 
       coresUsed += driverDesc.cores

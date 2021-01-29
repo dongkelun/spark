@@ -132,8 +132,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def onStart(): Unit = {
       // Periodically revive offers to allow delay scheduling to work
+      // 调度程序为了运行任务而重新提供work资源的间隔长度。
       val reviveIntervalMs = conf.get(SCHEDULER_REVIVE_INTERVAL).getOrElse(1000L)
-
+      //每隔1秒，给自己发一个ReviveOffers,发给receive函数
       reviveThread.scheduleAtFixedRate(() => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(ReviveOffers))
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
@@ -295,10 +296,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // Make fake resource offers on all executors
+    //  在逻辑上，让所有Executor都成为计算资源的提供者
+    //  makeOffers()是提交taskSet执行的关键方法，它会被DriverEndpoint每秒调用一次，
+    //  如果有任何runJob等产生task的动作就会被提交到各个节点去执行==》由于是初始化，
+    //  先记住这个方法是会不断被触发的，等运行runJob(),再跟踪进来
     private def makeOffers(): Unit = {
       // Make sure no executor is killed while some task is launching on it
       val taskDescs = withLock {
+
+        // executorDataMap:HashMap[String, ExecutorData]保存executorId和ExecutorData的,
+        // executorDataMap的值是在，CoarseGrainedExecutorBackend这个RpcEndpoint初始化时在onStart方法，会给DriverEndpoint发送RegisterExecutor注入进去的
         // Filter out executors under killing //筛选当前active状态的所有的executors
+        //CoarseGrainedExecutorBackend的初始化是由StandaloneSchedulerBackend.start方法，触发去执行的
         val activeExecutors = executorDataMap.filterKeys(isExecutorActive)
         val workOffers = activeExecutors.map {
           case (id, executorData) =>
@@ -310,6 +319,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               }, executorData.resourceProfileId)
         }.toIndexedSeq
         // 此方法由集群调用，在集群的slave准备资源。根据TaskSet的优先级，以轮询的方式发送到任务，以保证负载均衡
+        // TaskSchedulerImpl.resourceOffers生成资源分配的二维数组：Seq[ArrayBuffer[TaskDescription](o.cores)]，
+        // 会被resourceOfferSingleTaskSet调用，
         scheduler.resourceOffers(workOffers, true)
       }
       if (taskDescs.nonEmpty) {
@@ -462,7 +473,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   val driverEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint())
-
+  println("driverEndpoint")
   protected def minRegisteredRatio: Double = _minRegisteredRatio
 
   /**
@@ -538,6 +549,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
 
   override def start(): Unit = {
+    println("start")
     if (UserGroupInformation.isSecurityEnabled()) {
       delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>

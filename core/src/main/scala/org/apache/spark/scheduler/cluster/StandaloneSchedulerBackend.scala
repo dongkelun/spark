@@ -70,11 +70,16 @@ private[spark] class StandaloneSchedulerBackend(
       launcherBackend.connect()
     }
 
-    // The endpoint for executors to talk to us
+    // The endpoint for executors to talk to us 得到sparkDriver对应的url
+    // spark.driver.host 、 spark.driver.port是在SparkEnv中设置进去的
+    // s"spark://$name@${rpcAddress.host}:${rpcAddress.port}"
+    //spark://CoarseGrainedScheduler@DRIVER_HOST_ADDRESS:DRIVER_PORT
     val driverUrl = RpcEndpointAddress(
       sc.conf.get(config.DRIVER_HOST_ADDRESS),
       sc.conf.get(config.DRIVER_PORT),
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+    //是给CoarseGrainedExecutorBackend使用的,如何知道是给CoarseGrainedExecutorBackend？
+    // 是在val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",...
     val args = Seq(
       "--driver-url", driverUrl,
       "--executor-id", "{{EXECUTOR_ID}}",
@@ -100,11 +105,14 @@ private[spark] class StandaloneSchedulerBackend(
       }
 
     // Start executors with a few necessary configs for registering with the scheduler
+    // 使用一些必要的配置启动executors,以便与调度程序一起注册
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
+    //sc.ui就是SparkUI，得到sparkUI的http地址 http://host:4040,这个4040就是spark的作业运行时job相关信息
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
+    // 每个CoarseGrainedExecutorBackend的core的个数 --executor-cores 或spark.executor.cores
     val coresPerExecutor = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.
     // ExecutorAllocationManager will send the real initial limit to the Master later.
@@ -119,6 +127,8 @@ private[spark] class StandaloneSchedulerBackend(
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit,
       resourceReqsPerExecutor = executorResourceReqs)
+    //创建AppClient，传入相应启动参数,可以看出会将org.apache.spark.executor.CoarseGrainedExecutorBackend启动起来
+    //发送信息给Worker,使用Jdk的ProcessBuilder.start()来启动CoarseGrainedExecutorBackend
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)

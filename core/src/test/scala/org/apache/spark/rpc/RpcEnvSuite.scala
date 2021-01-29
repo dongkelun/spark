@@ -74,7 +74,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receive = {
-        case msg: String => message = msg
+        case msg: String => {
+          println(msg)
+          message = msg
+        }
       }
     })
     rpcEndpointRef.send("hello")

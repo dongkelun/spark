@@ -144,6 +144,8 @@ private[deploy] class ExecutorRunner(
 
   /**
    * Download and run the executor described in our ApplicationDescription
+   * fetchAndRunExecutor方法中将收到的信息拼接为Linux命令，然后使用ProcessBuilder执行Linux命令
+   * 启动CoarseGrainedExecutorBackend，和启动Driver的方式如出一辙
    */
   private def fetchAndRunExecutor(): Unit = {
     try {
@@ -154,6 +156,7 @@ private[deploy] class ExecutorRunner(
       val subsOpts = appDesc.command.javaOpts.map {
         Utils.substituteAppNExecIds(_, appId, execId.toString)
       }
+      //拼接Linux命令
       val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
@@ -178,6 +181,7 @@ private[deploy] class ExecutorRunner(
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
 
+      //执行Linux命令
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         redactedCommand, "=" * 40)

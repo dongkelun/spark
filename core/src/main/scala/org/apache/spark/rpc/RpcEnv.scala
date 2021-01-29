@@ -86,6 +86,8 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Register a [[RpcEndpoint]] with a name and return its [[RpcEndpointRef]]. [[RpcEnv]] does not
    * guarantee thread-safety.
+   *
+   * 注册endpoint，必须指定名称，客户端路由就靠这个名称来找endpoint
    */
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
@@ -104,6 +106,8 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   /**
    * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
+   *
+   * 拿到一个endpoint的引用
    */
   def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
     setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)

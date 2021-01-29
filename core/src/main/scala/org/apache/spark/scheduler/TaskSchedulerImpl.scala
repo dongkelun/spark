@@ -220,8 +220,9 @@ private[spark] class TaskSchedulerImpl(
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
   override def start(): Unit = {
+    //backend是通过将initialize，将StandaloneSchedulerBackend注入给backend成员
     backend.start()
-
+    //spark.speculation:如果设置为“true”，则tasks会推测性执行。 这意味着如果一个或多个任务在一个阶段缓慢运行，它们将被重新启动。
     if (!isLocal && conf.get(SPECULATION_ENABLED)) {
       logInfo("Starting speculative execution thread")
       speculationScheduler.scheduleWithFixedDelay(
